@@ -1,0 +1,39 @@
+name: "扫描全能王增强"
+description: "Cookie 获取 + 自动签到（支持开关控制）"
+author: "miniios"
+icon: "doc.text.viewfinder"
+
+env_schema:
+  ENABLE_COOKIE:
+    name: Cookie 获取
+    description: 是否启用 Cookie 抓取
+    options:
+      - "true"
+      - "false"
+  ENABLE_SIGN:
+    name: 自动签到
+    description: 是否启用每日签到
+    options:
+      - "true"
+      - "false"
+
+mitm:
+  hostnames:
+    - api-cs.intsig.net
+
+scriptings:
+  - http_request:
+      name: "扫描全能王 Cookie"
+      match: "^https:\\/\\/api-cs\\.intsig\\.net\\/user\\/cs\\/get_user_attribute"
+      script_url: "https://raw.githubusercontent.com/MaYIHEI/paperclip/refs/heads/main/app/camscanner/camscanner.cookie.js"
+      timeout: 60
+      # 开关控制
+      enable: "{{{ENABLE_COOKIE}}}"
+
+  - schedule:
+      name: "扫描全能王签到"
+      cron: "15 10 * * *"
+      script_url: "https://raw.githubusercontent.com/MaYIHEI/paperclip/refs/heads/main/app/camscanner/camscanner.js"
+      timeout: 120
+      # 开关控制
+      enable: "{{{ENABLE_SIGN}}}"
