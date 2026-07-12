@@ -1,5 +1,5 @@
 name: "WPS 签到模块"
-description: "WPS 自动获取 Cookie + 每日签到（支持 UI 开关）"
+description: "WPS 自动获取 Cookie + 每日签到"
 author: "miniios"
 icon: "checkmark.seal.fill"
 
