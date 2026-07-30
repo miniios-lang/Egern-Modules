@@ -1,60 +1,95 @@
-name: "WorkBuddy / CodeBuddy CN 自动签到"
-description: "每天 09:05 和 21:05 在设备本地时区自动签到。凭据和请求数据保存在 Egern Env 中，脚本会基于 refreshToken 自动获取最新 token。"
-author: "Sliverkiss/workbuddy2api 适配"
+# =============================================================================
+# WorkBuddy 自动化模块 (Egern)
+# 功能:
+#   1. 自动获取 / 刷新 Token (OAuth 设备流登录 + refreshToken 自动续期)
+#   2. 定时签到 (按 cron 执行, 记录成功/失败与响应信息, 发送通知)
+#   3. 多账号支持 (每个账号独立刷新 + 签到, 互不干扰)
+#
+# 接口依据: https://github.com/Sliverkiss/workbuddy2api
+# 模块规范: https://egernapp.com/zh-CN/docs/configuration/modules
+#           https://egernapp.com/zh-CN/docs/configuration/scriptings
+#
+# 导入方式:
+#   在 Egern 主配置的 modules 中引用本文件 (本地路径或远程 URL)。
+#   例如:
+#     modules:
+#       - url: "/绝对路径/workbuddy-egern-module/workbuddy.module.yaml"
+#         enabled: true
+#   启用后, 在模块设置面板填写账号凭证与定时规则即可。
+#
+# 首次使用 (二选一):
+#   A. 运行「WorkBuddy 登录 (添加账号)」脚本 → 浏览器登录 → 再次运行完成绑定
+#      (账号保存在脚本持久化存储 wb_accounts_v1, 无需手动填 JSON)
+#   B. 直接在模块设置面板把 ACCOUNTS_JSON 填成账号数组 (见下方说明)
+# =============================================================================
+
+name: "WorkBuddy 自动化 (签到 / Token)"
+description: "自动刷新 WorkBuddy 认证 Token 并按 Cron 定时为多账号执行每日签到，记录结果并通知。"
+author: "WorkBuddy Automation"
 homepage: "https://github.com/Sliverkiss/workbuddy2api"
-icon: "checkmark.seal.fill"
+icon: "checkmark.circle.fill"
+
+# -----------------------------------------------------------------------------
+# 模块参数默认值 (可在模块设置面板中覆盖)。
+# 加载时 {{{...}}} 占位符会被替换为下方声明的默认值或用户覆盖值。
+# -----------------------------------------------------------------------------
 compat_arguments:
-  SCRIPT_URL: "https://example.invalid/workbuddy-auto-checkin.js"
+  CHECKIN_CRON: "0 9 * * *"        # 每日 09:00 签到。支持标准 5 字段(分 时 日 月 周)或 6 字段(秒 分 时 日 月 周)
+  ACCOUNTS_JSON: "[]"              # 多账号凭证 JSON 数组; 留空 [] 则使用登录脚本写入的存储账号
+  NOTIFY: "true"                   # 是否发送签到结果通知: true / false
+  REGION_DEFAULT: "cn"             # 默认区服: cn (copilot.tencent.com / codebuddy.cn) 或 global (workbuddy.ai)
+  LOG_RETENTION: "30"              # 签到日志在持久化存储中保留的条数
+
+# 模块设置面板 UI (Egern 依据 env_schema 自动生成控件)
 env_schema:
-  REFRESH_TOKEN:
-    name: 刷新令牌（推荐）
-    description: "设备流登录后得到的 refreshToken。脚本每次签到前自动用它换取最新 accessToken，无需再手动更新 token。与 AUTH_TOKEN 二选一，优先用本项。"
-  AUTH_TOKEN:
-    name: 访问令牌（手动）
-    description: "手动抓包得到的 accessToken（短期有效）。若已设置 REFRESH_TOKEN 可留空。两者都未设置时脚本不会签到。"
-  USER_ID:
-    name: 用户 ID
-    description: "设备流返回的个人 uid，用于签到的 X-User-Id 请求头。建议填写，部分接口需要。"
-  ENTERPRISE_ID:
-    name: 企业/租户 ID
-    description: "设备流返回的企业 ID（可选）。填写后会带上 X-Enterprise-Id 与 X-Tenant-Id 请求头。"
-  DOMAIN:
-    name: 域名标识
-    description: "账号域名（可选）。留空视为国内区；填 workbuddy.ai 表示 global 区，会带上 X-Domain 请求头。"
-  CHECKIN_URL:
-    name: 签到接口地址
-    description: "签到请求完整 URL。默认 https://www.codebuddy.cn/v2/billing/meter/daily-checkin，留空即用默认值，通常无需修改。"
-    default_value: "https://www.codebuddy.cn/v2/billing/meter/daily-checkin"
-  CHECKIN_METHOD:
-    name: 请求方法
-    description: "从抓包请求中选择对应方法，默认 POST。"
-    options:
-      - POST
-      - PUT
-      - GET
-  CHECKIN_BODY:
-    name: 请求体
-    description: "POST 或 PUT 的请求体，使用 JSON 文本；默认 {}。若请求无 body 可留空。"
-    default_value: "{}"
-  EXTRA_HEADERS_JSON:
-    name: 额外请求头
-    description: "可选 JSON 对象，例如 {\"x-client-version\":\"1.0.0\"}。不要在此重复填写 Authorization。"
-  DEVICE_FLOW_BOOTSTRAP:
-    name: 首次登录引导
-    description: "设为 true 时，若未配置任何 token，脚本会发一条通知并给出浏览器登录链接，用于首次获取 refreshToken。获取后建议改回 false。"
-    options:
-      - "false"
-      - "true"
+  ACCOUNTS_JSON:
+    name: "账号凭证 (JSON 数组)"
+    description: "留空 [] 则使用登录脚本写入的账号；或粘贴 [{\"uid\":\"\",\"refreshToken\":\"\",\"enterpriseId\":\"\",\"domain\":\"\",\"label\":\"账号1\"}]"
+    default_value: "[]"
   NOTIFY:
-    name: 通知推送
-    description: "签到成功、已签到或出错时弹出通知。"
+    name: "签到结果通知"
     options:
       - "true"
       - "false"
+  REGION_DEFAULT:
+    name: "默认区服"
+    options:
+      - "cn"
+      - "global"
+  LOG_RETENTION:
+    name: "签到日志保留条数"
+    default_value: "30"
+
 scriptings:
+  # ---------------------------------------------------------------------------
+  # 1) 定时签到 (核心): 读取多账号 → 必要时用 refreshToken 刷新 → 签到 → 记录 → 通知
+  # ---------------------------------------------------------------------------
   - schedule:
-      name: "WorkBuddy 自动签到"
-      # Egern 使用设备本地时区执行定时任务。
-      cron: "5 9,21 * * *"
-      script_url: "{{{SCRIPT_URL}}}"
+      name: "WorkBuddy 每日签到"
+      cron: "{{{CHECKIN_CRON}}}"
+      script_url: "./scripts/workbuddy-checkin.js"
+      env:
+        ACCOUNTS_JSON: "{{{ACCOUNTS_JSON}}}"
+        NOTIFY: "{{{NOTIFY}}}"
+        REGION_DEFAULT: "{{{REGION_DEFAULT}}}"
+        LOG_RETENTION: "{{{LOG_RETENTION}}}"
+      timeout: 60
+      update_interval: 86400
+
+  # ---------------------------------------------------------------------------
+  # 2) 登录 / 添加账号 (手动触发): OAuth 设备流, 浏览器登录后写入持久化存储
+  # ---------------------------------------------------------------------------
+  - generic:
+      name: "WorkBuddy 登录 (添加账号)"
+      script_url: "./scripts/workbuddy-login.js"
+      env:
+        REGION_DEFAULT: "{{{REGION_DEFAULT}}}"
+      timeout: 30
+
+  # ---------------------------------------------------------------------------
+  # 3) 查看账号与签到状态 (手动触发)
+  # ---------------------------------------------------------------------------
+  - generic:
+      name: "WorkBuddy 状态查看"
+      script_url: "./scripts/workbuddy-status.js"
       timeout: 30
