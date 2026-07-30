@@ -1,48 +1,60 @@
-name: "WorkBuddy / CodeBuddy CN Auto Check-in"
-description: "Runs at 09:05 and 21:05 in the device time zone. Credentials and request data remain in Egern Env."
-author: "Sliverkiss/workbuddy2api adaptation"
+name: "WorkBuddy / CodeBuddy CN 自动签到"
+description: "每天 09:05 和 21:05 在设备本地时区自动签到。凭据和请求数据保存在 Egern Env 中，脚本会基于 refreshToken 自动获取最新 token。"
+author: "Sliverkiss/workbuddy2api 适配"
 homepage: "https://github.com/Sliverkiss/workbuddy2api"
 icon: "checkmark.seal.fill"
 compat_arguments:
   SCRIPT_URL: "https://example.invalid/workbuddy-auto-checkin.js"
 env_schema:
-  CHECKIN_URL:
-    name: Check-in URL
-    description: "Copy the complete URL from a captured WorkBuddy or CodeBuddy CN check-in request. Leave empty to disable sending."
+  REFRESH_TOKEN:
+    name: 刷新令牌（推荐）
+    description: "设备流登录后得到的 refreshToken。脚本每次签到前自动用它换取最新 accessToken，无需再手动更新 token。与 AUTH_TOKEN 二选一，优先用本项。"
   AUTH_TOKEN:
-    name: Access token
-    description: "Enter only the token after Bearer, not the complete Authorization header."
-  AUTH_HEADER:
-    name: Authentication header
-    description: "Usually Authorization."
-    default_value: "Authorization"
-  AUTH_PREFIX:
-    name: Authentication prefix
-    description: "Usually Bearer followed by one space. Leave empty if the endpoint does not use a prefix."
-    default_value: "Bearer "
+    name: 访问令牌（手动）
+    description: "手动抓包得到的 accessToken（短期有效）。若已设置 REFRESH_TOKEN 可留空。两者都未设置时脚本不会签到。"
+  USER_ID:
+    name: 用户 ID
+    description: "设备流返回的个人 uid，用于签到的 X-User-Id 请求头。建议填写，部分接口需要。"
+  ENTERPRISE_ID:
+    name: 企业/租户 ID
+    description: "设备流返回的企业 ID（可选）。填写后会带上 X-Enterprise-Id 与 X-Tenant-Id 请求头。"
+  DOMAIN:
+    name: 域名标识
+    description: "账号域名（可选）。留空视为国内区；填 workbuddy.ai 表示 global 区，会带上 X-Domain 请求头。"
+  CHECKIN_URL:
+    name: 签到接口地址
+    description: "签到请求完整 URL。默认 https://www.codebuddy.cn/v2/billing/meter/daily-checkin，留空即用默认值，通常无需修改。"
+    default_value: "https://www.codebuddy.cn/v2/billing/meter/daily-checkin"
   CHECKIN_METHOD:
-    name: Request method
-    description: "Choose the method from the captured request."
+    name: 请求方法
+    description: "从抓包请求中选择对应方法，默认 POST。"
     options:
       - POST
       - PUT
       - GET
   CHECKIN_BODY:
-    name: Request body
-    description: "Body for POST or PUT. Use JSON text; leave empty when the request has no body."
+    name: 请求体
+    description: "POST 或 PUT 的请求体，使用 JSON 文本；默认 {}。若请求无 body 可留空。"
+    default_value: "{}"
   EXTRA_HEADERS_JSON:
-    name: Additional headers
-    description: "Optional JSON object, for example {\"x-client-version\":\"1.0.0\"}. Do not duplicate the token here."
+    name: 额外请求头
+    description: "可选 JSON 对象，例如 {\"x-client-version\":\"1.0.0\"}。不要在此重复填写 Authorization。"
+  DEVICE_FLOW_BOOTSTRAP:
+    name: 首次登录引导
+    description: "设为 true 时，若未配置任何 token，脚本会发一条通知并给出浏览器登录链接，用于首次获取 refreshToken。获取后建议改回 false。"
+    options:
+      - "false"
+      - "true"
   NOTIFY:
-    name: Notifications
-    description: "Show a notification for success, already checked in, or errors."
+    name: 通知推送
+    description: "签到成功、已签到或出错时弹出通知。"
     options:
       - "true"
       - "false"
 scriptings:
   - schedule:
-      name: "WorkBuddy Auto Check-in"
-      # Egern schedules using the device local time zone.
+      name: "WorkBuddy 自动签到"
+      # Egern 使用设备本地时区执行定时任务。
       cron: "5 9,21 * * *"
       script_url: "{{{SCRIPT_URL}}}"
       timeout: 30
