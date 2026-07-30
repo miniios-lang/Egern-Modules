@@ -1,0 +1,48 @@
+name: "WorkBuddy / CodeBuddy CN Auto Check-in"
+description: "Runs at 09:05 and 21:05 in the device time zone. Credentials and request data remain in Egern Env."
+author: "Sliverkiss/workbuddy2api adaptation"
+homepage: "https://github.com/Sliverkiss/workbuddy2api"
+icon: "checkmark.seal.fill"
+compat_arguments:
+  SCRIPT_URL: "https://example.invalid/workbuddy-auto-checkin.js"
+env_schema:
+  CHECKIN_URL:
+    name: Check-in URL
+    description: "Copy the complete URL from a captured WorkBuddy or CodeBuddy CN check-in request. Leave empty to disable sending."
+  AUTH_TOKEN:
+    name: Access token
+    description: "Enter only the token after Bearer, not the complete Authorization header."
+  AUTH_HEADER:
+    name: Authentication header
+    description: "Usually Authorization."
+    default_value: "Authorization"
+  AUTH_PREFIX:
+    name: Authentication prefix
+    description: "Usually Bearer followed by one space. Leave empty if the endpoint does not use a prefix."
+    default_value: "Bearer "
+  CHECKIN_METHOD:
+    name: Request method
+    description: "Choose the method from the captured request."
+    options:
+      - POST
+      - PUT
+      - GET
+  CHECKIN_BODY:
+    name: Request body
+    description: "Body for POST or PUT. Use JSON text; leave empty when the request has no body."
+  EXTRA_HEADERS_JSON:
+    name: Additional headers
+    description: "Optional JSON object, for example {\"x-client-version\":\"1.0.0\"}. Do not duplicate the token here."
+  NOTIFY:
+    name: Notifications
+    description: "Show a notification for success, already checked in, or errors."
+    options:
+      - "true"
+      - "false"
+scriptings:
+  - schedule:
+      name: "WorkBuddy Auto Check-in"
+      # Egern schedules using the device local time zone.
+      cron: "5 9,21 * * *"
+      script_url: "{{{SCRIPT_URL}}}"
+      timeout: 30
